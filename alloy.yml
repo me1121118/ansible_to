@@ -1,0 +1,14 @@
+---
+- name: เช็กสถานะ alloy
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: ดึงสถานะ service
+      ansible.builtin.systemd:
+        name: alloy
+      register: svc
+
+    - name: แสดงสถานะ
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ svc.status.ActiveState }} ({{ svc.status.SubState }})"
