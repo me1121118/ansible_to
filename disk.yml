@@ -1,0 +1,14 @@
+---
+- name: Check Disk Usage on All Hosts
+  hosts: all
+  gather_facts: false
+  ignore_unreachable: true
+
+  tasks:
+    - name: 1. Run df -h on remote host
+      ansible.builtin.shell: df -h -x tmpfs -x devtmpfs -x squashfs
+      register: disk_out
+
+    - name: 2. Show disk usage output
+      ansible.builtin.debug:
+        msg: "{{ disk_out.stdout_lines }}"
