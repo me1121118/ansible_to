@@ -1,0 +1,16 @@
+---
+- name: เช็กการส่งข้อมูลของ alloy
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: อ่านค่า remote write
+      ansible.builtin.shell: >
+        curl -s http://localhost:12345/metrics |
+        grep -E "^prometheus_remote_storage_(samples_total|samples_failed_total|samples_pending)"
+      register: result
+      changed_when: false
+      failed_when: false
+
+    - name: แสดงผล
+      ansible.builtin.debug:
+        var: result.stdout_lines
