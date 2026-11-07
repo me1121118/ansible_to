@@ -1,0 +1,33 @@
+---
+- name: เช็กว่าติดตั้ง alloy หรือยัง
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: หา binary ของ alloy
+      ansible.builtin.shell: command -v alloy || which alloy
+      register: bin
+      changed_when: false
+      failed_when: false
+
+    - name: เช็กว่ามี service alloy
+      ansible.builtin.shell: systemctl list-unit-files alloy.service --no-legend | grep -q alloy
+      register: svc
+      changed_when: false
+      failed_when: false
+
+    - name: เช็กเวอร์ชัน
+      ansible.builtin.command: alloy --version
+      register: ver
+      changed_when: false
+      failed_when: false
+      when: bin.rc == 0
+
+    - name: สรุปผล
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ 'ติดตั้งแล้ว' if (bin.rc == 0 or svc.rc == 0) else 'ยังไม่ได้ติดตั้ง' }}
+          | binary={{ bin.stdout | default('-') if bin.rc == 0 else 'ไม่พบ' }}
+          | service={{ 'มี' if svc.rc == 0 else 'ไม่มี' }}
+          | {{ (ver.stdout_lines | first) if (ver.stdout_lines | default([]) | length > 0) else '' }}
