@@ -18,6 +18,12 @@
       when: ansible_facts.os_family is defined and ansible_facts.os_family != 'Debian'
 
     # ---------- ติดตั้ง ----------
+    - name: ติดตั้ง gpg
+      ansible.builtin.apt:
+        name: gpg
+        state: present
+        update_cache: true
+
     - name: สร้างโฟลเดอร์เก็บ key
       ansible.builtin.file:
         path: /etc/apt/keyrings
@@ -26,7 +32,7 @@
 
     - name: ดาวน์โหลด GPG key ของ Grafana
       ansible.builtin.get_url:
-        url: https://apt.grafana.com/gpg.key
+        url: https://apt.grafana.com/gpg-full.key
         dest: "{{ grafana_key_path }}"
         mode: "0644"
 
