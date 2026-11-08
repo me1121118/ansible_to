@@ -1,0 +1,89 @@
+---
+- name: ตั้งค่า alloy (ไม่รวมการติดตั้ง)
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    alloy_config_path: /etc/alloy/config.alloy
+  tasks:
+    - name: เช็กว่ามี service alloy อยู่ในเครื่อง
+      ansible.builtin.shell: systemctl list-unit-files alloy.service --no-legend | grep -q alloy
+      register: alloy_exists
+      changed_when: false
+      failed_when: false
+
+    - name: แจ้งเครื่องที่ยังไม่ได้ติดตั้ง alloy
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: ไม่พบ alloy ข้ามเครื่องนี้"
+      when: alloy_exists.rc != 0
+
+    - name: จบการทำงานของเครื่องที่ไม่มี alloy
+      ansible.builtin.meta: end_host
+      when: alloy_exists.rc != 0
+
+    - name: วางไฟล์ config (สำรองไฟล์เดิมไว้)
+      ansible.builtin.copy:
+        dest: "{{ alloy_config_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        content: |
+          logging {
+            level = "warn"
+          }
+
+          prometheus.exporter.unix "node" {
+            set_collectors = ["cpu", "diskstats", "filesystem", "meminfo", "netdev", "vmstat"]
+            filesystem {
+              fs_types_exclude = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|tmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+              mount_timeout    = "5s"
+            }
+          }
+
+          prometheus.scrape "node" {
+            scrape_interval = "15s"
+            scrape_timeout  = "10s"
+            targets    = prometheus.exporter.unix.node.targets
+            forward_to = [prometheus.remote_write.logger.receiver]
+          }
+
+          prometheus.remote_write "logger" {
+            endpoint { url = "http://10.1.0.220:8428/api/v1/write" }
+          }
+      register: config_result
+
+    - name: หยุดและปิด node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: stopped
+        enabled: false
+      register: ne_result
+      failed_when:
+        - ne_result.failed | default(false)
+        - "'Could not find' not in (ne_result.msg | default(''))"
+
+    - name: enable alloy ให้เริ่มตอนเปิดเครื่อง
+      ansible.builtin.systemd:
+        name: alloy
+        enabled: true
+
+    - name: restart alloy เพื่อโหลด config ใหม่
+      ansible.builtin.systemd:
+        name: alloy
+        state: restarted
+
+    - name: รอให้ service เริ่ม
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: ตรวจสถานะ alloy หลัง restart
+      ansible.builtin.systemd:
+        name: alloy
+      register: svc
+
+    - name: สรุปผล
+      ansible.builtin.assert:
+        that: svc.status.ActiveState == 'active'
+        fail_msg: "{{ inventory_hostname }}: alloy ไม่ทำงานหลัง restart ({{ svc.status.ActiveState }})"
+        success_msg: "{{ inventory_hostname }}: alloy active, config {{ 'เปลี่ยน' if config_result.changed else 'ไม่เปลี่ยน' }}"
