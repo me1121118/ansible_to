@@ -2,22 +2,20 @@
 - name: ติดตั้งและตั้งค่า alloy
   hosts: all
   become: true
-  gather_facts: false
+  gather_facts: true
   ignore_unreachable: true
-  gather_subset:
-    - min
   vars:
     alloy_config_path: /etc/alloy/config.alloy
     grafana_key_path: /etc/apt/keyrings/grafana.asc
   tasks:
     - name: ข้ามเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.debug:
-        msg: "{{ inventory_hostname }}: ไม่ใช่ Debian/Ubuntu ({{ ansible_facts['os_family'] }}) ข้ามเครื่องนี้"
-      when: ansible_facts['os_family'] != 'Debian'
+        msg: "{{ inventory_hostname }}: ข้ามเครื่องนี้ (ไม่ใช่ Debian/Ubuntu)"
+      when: ansible_facts.os_family is defined and ansible_facts.os_family != 'Debian'
 
     - name: จบการทำงานของเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.meta: end_host
-      when: ansible_facts['os_family'] != 'Debian'
+      when: ansible_facts.os_family is defined and ansible_facts.os_family != 'Debian'
 
     # ---------- ติดตั้ง ----------
     - name: สร้างโฟลเดอร์เก็บ key
