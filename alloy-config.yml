@@ -2,7 +2,8 @@
 - name: ติดตั้งและตั้งค่า alloy
   hosts: all
   become: true
-  gather_facts: true
+  gather_facts: false
+  ignore_unreachable: true
   gather_subset:
     - min
   vars:
