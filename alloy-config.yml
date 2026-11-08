@@ -1,26 +1,52 @@
 ---
-- name: ตั้งค่า alloy (ไม่รวมการติดตั้ง)
+- name: ติดตั้งและตั้งค่า alloy
   hosts: all
   become: true
-  gather_facts: false
+  gather_facts: true
+  gather_subset:
+    - min
   vars:
     alloy_config_path: /etc/alloy/config.alloy
+    grafana_key_path: /etc/apt/keyrings/grafana.asc
   tasks:
-    - name: เช็กว่ามี service alloy อยู่ในเครื่อง
-      ansible.builtin.shell: systemctl list-unit-files alloy.service --no-legend | grep -q alloy
-      register: alloy_exists
-      changed_when: false
-      failed_when: false
-
-    - name: แจ้งเครื่องที่ยังไม่ได้ติดตั้ง alloy
+    - name: ข้ามเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.debug:
-        msg: "{{ inventory_hostname }}: ไม่พบ alloy ข้ามเครื่องนี้"
-      when: alloy_exists.rc != 0
+        msg: "{{ inventory_hostname }}: ไม่ใช่ Debian/Ubuntu ({{ ansible_facts['os_family'] }}) ข้ามเครื่องนี้"
+      when: ansible_facts['os_family'] != 'Debian'
 
-    - name: จบการทำงานของเครื่องที่ไม่มี alloy
+    - name: จบการทำงานของเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.meta: end_host
-      when: alloy_exists.rc != 0
+      when: ansible_facts['os_family'] != 'Debian'
 
+    # ---------- ติดตั้ง ----------
+    - name: สร้างโฟลเดอร์เก็บ key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: ดาวน์โหลด GPG key ของ Grafana
+      ansible.builtin.get_url:
+        url: https://apt.grafana.com/gpg.key
+        dest: "{{ grafana_key_path }}"
+        mode: "0644"
+
+    - name: เพิ่ม repository ของ Grafana
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by={{ grafana_key_path }}] https://apt.grafana.com stable main"
+        filename: grafana
+        state: present
+        update_cache: true
+
+    - name: ติดตั้ง alloy, net-tools, glances
+      ansible.builtin.apt:
+        name:
+          - alloy
+          - net-tools
+          - glances
+        state: present
+
+    # ---------- ตั้งค่า ----------
     - name: วางไฟล์ config (สำรองไฟล์เดิมไว้)
       ansible.builtin.copy:
         dest: "{{ alloy_config_path }}"
@@ -77,6 +103,7 @@
       ansible.builtin.pause:
         seconds: 5
 
+    # ---------- ตรวจผล ----------
     - name: ตรวจสถานะ alloy หลัง restart
       ansible.builtin.systemd:
         name: alloy
