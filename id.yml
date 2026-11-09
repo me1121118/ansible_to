@@ -1,0 +1,39 @@
+---
+# เช็กสิทธิ์ root / sudo (อ่านอย่างเดียว ไม่แก้ไขอะไรบนเครื่อง)
+- name: เช็กสิทธิ์ become และ sudo
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: user ที่ SSH เข้า (ไม่ใช้ become)
+      ansible.builtin.command: id -un
+      become: false
+      register: ssh_user
+      changed_when: false
+      failed_when: false
+
+    - name: user หลัง become
+      ansible.builtin.command: id -un
+      register: become_user_result
+      changed_when: false
+      failed_when: false
+
+    - name: ทดสอบ sudo แบบไม่ถามรหัสบนเครื่อง
+      ansible.builtin.command: sudo -n true
+      become: false
+      register: sudo_nopass
+      changed_when: false
+      failed_when: false
+
+    - name: สรุปผลต่อเครื่อง
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          ssh_user={{ ssh_user.stdout | default('?') }} |
+          หลัง_become={{ become_user_result.stdout | default('?') }}
+          {{ '(OK เป็น root)' if (become_user_result.stdout | default('')) == 'root' else '(ไม่ใช่ root!)' }} |
+          sudo_ไม่ถามรหัส={{ 'ได้' if sudo_nopass.rc | default(1) == 0 else 'ไม่ได้' }} |
+          ansible_become={{ ansible_become | default('ไม่ได้ตั้ง') }} |
+          ansible_become_user={{ ansible_become_user | default('ไม่ได้ตั้ง') }} |
+          ansible_become_method={{ ansible_become_method | default('ไม่ได้ตั้ง') }} |
+          มีรหัสผ่าน_become={{ ansible_become_password is defined }}
