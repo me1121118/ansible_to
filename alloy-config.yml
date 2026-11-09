@@ -3,19 +3,36 @@
   hosts: all
   become: true
   gather_facts: true
-  ignore_unreachable: true
+  # รันทีละ 10 เครื่อง และหยุดทั้งงานถ้าเครื่องในรอบนั้นล้มเกิน 30%
+  serial: 10
+  max_fail_percentage: 30
   vars:
     alloy_config_path: /etc/alloy/config.alloy
     grafana_key_path: /etc/apt/keyrings/grafana.asc
   tasks:
+    # ---------- ตรวจก่อนเริ่ม ----------
     - name: ข้ามเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.debug:
         msg: "{{ inventory_hostname }}: ข้ามเครื่องนี้ (ไม่ใช่ Debian/Ubuntu)"
-      when: ansible_facts.os_family is defined and ansible_facts.os_family != 'Debian'
+      when: ansible_facts['os_family'] | default('') != 'Debian'
 
     - name: จบการทำงานของเครื่องที่ไม่ใช่ Debian/Ubuntu
       ansible.builtin.meta: end_host
-      when: ansible_facts.os_family is defined and ansible_facts.os_family != 'Debian'
+      when: ansible_facts['os_family'] | default('') != 'Debian'
+
+    - name: ตรวจว่า become ทำงาน (ต้องเป็น root)
+      ansible.builtin.command: id -u
+      register: uid
+      changed_when: false
+
+    - name: หยุดเครื่องนี้ถ้าไม่ได้เป็น root
+      ansible.builtin.assert:
+        that: uid.stdout == '0'
+        quiet: true
+        fail_msg: >-
+          {{ inventory_hostname }}: become ไม่ทำงาน (uid={{ uid.stdout }})
+          ตรวจตัวแปร ansible_become ใน Inventory / Variable Group / Extra variables
+          และสิทธิ์ sudo ของ {{ ansible_user | default('user') }}
 
     # ---------- ติดตั้ง ----------
     - name: ติดตั้ง gpg
@@ -116,6 +133,6 @@
 
     - name: สรุปผล
       ansible.builtin.assert:
-        that: svc.status.ActiveState == 'active'
-        fail_msg: "{{ inventory_hostname }}: alloy ไม่ทำงานหลัง restart ({{ svc.status.ActiveState }})"
+        that: (svc.status.ActiveState | default('unknown')) == 'active'
+        fail_msg: "{{ inventory_hostname }}: alloy ไม่ทำงานหลัง restart ({{ svc.status.ActiveState | default('unknown') }})"
         success_msg: "{{ inventory_hostname }}: alloy active, config {{ 'เปลี่ยน' if config_result.changed else 'ไม่เปลี่ยน' }}"
