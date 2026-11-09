@@ -1,9 +1,9 @@
----
-# เช็กสิทธิ์ root / sudo (อ่านอย่างเดียว ไม่แก้ไขอะไรบนเครื่อง)
 - name: เช็กสิทธิ์ become และ sudo
   hosts: all
   gather_facts: false
   become: true
+  become_user: root
+  become_method: sudo
   tasks:
     - name: user ที่ SSH เข้า (ไม่ใช้ become)
       ansible.builtin.command: id -un
