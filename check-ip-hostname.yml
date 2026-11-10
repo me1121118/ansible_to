@@ -1,0 +1,52 @@
+---
+# เช็ก IP และ hostname ของแต่ละเครื่อง (อ่านอย่างเดียว ไม่ต้องใช้ sudo)
+- name: เช็ก IP และ hostname
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: อ่าน hostname
+      ansible.builtin.command: hostname
+      register: hn
+      changed_when: false
+      failed_when: false
+
+    - name: อ่าน FQDN
+      ansible.builtin.command: hostname -f
+      register: fqdn
+      changed_when: false
+      failed_when: false
+
+    - name: อ่าน IP ทั้งหมดของเครื่อง
+      ansible.builtin.command: hostname -I
+      register: ips
+      changed_when: false
+      failed_when: false
+
+    - name: อ่าน IP ที่ใช้ออกเครือข่ายหลัก
+      ansible.builtin.shell: >
+        ip -4 route get 1.1.1.1 2>/dev/null |
+        awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}'
+      register: main_ip
+      changed_when: false
+      failed_when: false
+
+    - name: เตรียมค่าสำหรับสรุปผล
+      ansible.builtin.set_fact:
+        real_hostname: "{{ hn.stdout | default('?') | trim }}"
+        real_fqdn: "{{ fqdn.stdout | default('?') | trim }}"
+        ip_list: "{{ (ips.stdout | default('')).split() }}"
+        main_ip_value: "{{ main_ip.stdout | default('?') | trim }}"
+        target_addr: "{{ ansible_host | default(inventory_hostname) }}"
+
+    - name: สรุปผลต่อเครื่อง
+      ansible.builtin.debug:
+        msg: >-
+          inventory={{ inventory_hostname }} |
+          ansible_host={{ target_addr }} |
+          hostname={{ real_hostname }} |
+          fqdn={{ real_fqdn }} |
+          ip_หลัก={{ main_ip_value }} |
+          ip_ทั้งหมด={{ ip_list | join(',') }} |
+          ชื่อ={{ 'ตรง' if (inventory_hostname.split('.')[0] | lower) == (real_hostname.split('.')[0] | lower) else 'ไม่ตรงกับ inventory' }} |
+          ip={{ 'ตรง' if target_addr in ip_list else 'ไม่พบ ip นี้บนเครื่อง (หรือ ansible_host เป็นชื่อ)' }}
